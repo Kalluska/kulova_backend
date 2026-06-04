@@ -1,0 +1,12 @@
+{
+  "name": "kulova-backend",
+  "version": "1.0.0",
+  "description": "Kulova AI agent backend",
+  "main": "index.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "stripe": "^14.0.0",
+    "twilio": "^5.0.0",
+    "node-fetch": "^3.3.2"
+  }
+}
