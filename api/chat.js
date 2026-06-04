@@ -18,10 +18,8 @@ module.exports = async (req, res) => {
   const history = conversations[sessionId];
 
   const systemPrompt = businessId === 'demo'
-    ? `Olet Kulovan asiakaspalvelu. Kulova on AI-palvelu joka hoitaa pienyrityksen asiakasviestit automaattisesti — WhatsApp, sähköposti ja nettisivun chat. Hinta 49€/kk, ei sitoutumista.
-
-Vastaa AINA lyhyesti — maksimissaan 2-3 lausetta. Älä käytä bullet-listoja tai emojeja. Puhu kuten normaali ihminen puhuisi, ei kuin markkinointiteksti. Älä aloita vastausta sanoilla "Hyvä kysymys" tai ylistyksellä. Vastaa suomeksi.`
-    : `Olet yrityksen asiakaspalvelu. Vastaa lyhyesti ja luonnollisesti suomeksi, maksimissaan 2-3 lausetta.`;
+    ? `Olet Kulova-demon AI-assistentti. Kulova on suomalainen AI-palvelu joka hoitaa yritysten asiakasviestinnän automaattisesti — WhatsApp, sähköposti, chat. Hinta 49€/kk. Vastaat lyhyesti ja selkeästi suomeksi. Jos kysytään muuta kuin Kulovaan liittyvää, ohjaa takaisin aiheeseen.`
+    : `Olet yrityksen asiakaspalveluagentti. Vastaat lyhyesti ja asiallisesti suomeksi.`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
