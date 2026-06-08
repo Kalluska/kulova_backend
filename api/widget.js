@@ -2,7 +2,7 @@
 // Lisätään asiakkaan nettisivulle yhdellä script-tagilla
 
 (function() {
-  const KULOVA_API = 'https://api.kulova.com';
+  const KULOVA_API = 'https://kulova-backend.vercel.app';
   const businessId = document.currentScript?.getAttribute('data-business') || 'demo';
   const sessionId = Math.random().toString(36).substring(2, 15);
 
