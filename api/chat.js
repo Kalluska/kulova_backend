@@ -31,6 +31,7 @@ function buildSystemPrompt(biz) {
   const botTone = biz.bot_tone || 'ystävällinen ja ammattimainen';
   const botInstructions = biz.bot_instructions || '';
   const website = biz.website || '';
+  const bookingUrl = biz.booking_url || '';
 
   return `Olet ${name}-yrityksen asiakaspalveluagentti nimeltä ${botName}.
 
@@ -39,6 +40,7 @@ YRITYSTIEDOT:
 - Palvelut: ${services}
 - Aukioloajat: ${hours}
 ${website ? `- Verkkosivusto: ${website}` : ''}
+${bookingUrl ? `- Ajanvarauslinkki: ${bookingUrl}` : ''}
 
 KÄYTTÄYTYMINEN:
 - Sävy: ${botTone}
@@ -46,6 +48,7 @@ KÄYTTÄYTYMINEN:
 - Pidät vastaukset lyhyinä ja selkeinä (max 3-4 lausetta)
 - Et käytä markdown-muotoilua (ei **bold**, ei # otsikot)
 - Et käytä emojeja ellei asiakas käytä niitä
+${bookingUrl ? `- Kun asiakas haluaa varata ajan tai kysyy ajanvarauksesta, lisää vastauksesi loppuun AINA tämä HTML-nappi täsmälleen näin: <a href="${bookingUrl}" target="_blank" style="display:inline-block;margin-top:8px;background:#c8f25a;color:#0a0a08;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Varaa aika →</a>` : ''}
 ${botInstructions ? `\nLISÄOHJEET:\n${botInstructions}` : ''}
 
 Jos asiakas kysyy jotain mitä et tiedä, kerro että ohjaat asian eteenpäin ja yritys ottaa yhteyttä.`;

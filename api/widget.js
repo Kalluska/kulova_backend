@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
   function addMessage(text, type) {
     const msg = document.createElement('div');
     msg.className = 'kulova-msg ' + type;
-    msg.textContent = text;
+    msg.innerHTML = text;
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return msg;
