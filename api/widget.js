@@ -1,4 +1,10 @@
-// widget.js — Kulova chat widget
+// widget.js — Vercel serverless function that serves the widget script
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  
+  const widgetCode = `// widget.js — Kulova chat widget
 // Lisätään asiakkaan nettisivulle yhdellä script-tagilla
 
 (function() {
@@ -98,3 +104,7 @@
   sendBtn.addEventListener('click', sendMessage);
   inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
 })();
+`;
+  
+  res.status(200).send(widgetCode);
+};
