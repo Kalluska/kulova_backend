@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'api-key': BREVO_API_KEY },
         body: JSON.stringify({
-          sender: { name: 'Kulova', email: 'hello@kulova.com' },
+          sender: { name: 'Kulova', email: 'kalle.etelaaho15@gmail.com' },
           to: [{ email: email.toLowerCase(), name: businesses[0].name }],
           subject: 'Kulova — kirjautumiskoodi',
           htmlContent: `
