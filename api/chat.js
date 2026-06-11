@@ -4,13 +4,16 @@ const conversations = {};
 const SUPABASE_URL = 'https://eacfiiscsdqdcoduyzkk.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
 
+const SB_HEADERS = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json'
+};
+
 async function getBusinessData(businessId) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/businesses?id=eq.${businessId}&select=*`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
+      headers: SB_HEADERS
     });
     const rows = await res.json();
     return rows?.[0] || null;
@@ -19,21 +22,70 @@ async function getBusinessData(businessId) {
   }
 }
 
+async function saveToSupabase(businessId, sessionId, userMsg, botReply) {
+  try {
+    const now = new Date().toISOString();
+
+    // 1. Hae tai luo keskustelu session_id:lla
+    let convId = null;
+    const findRes = await fetch(`${SUPABASE_URL}/rest/v1/conversations?session_id=eq.${sessionId}&select=id`, {
+      headers: SB_HEADERS
+    });
+    const found = await findRes.json();
+
+    if (found?.[0]?.id) {
+      convId = found[0].id;
+      await fetch(`${SUPABASE_URL}/rest/v1/conversations?id=eq.${convId}`, {
+        method: 'PATCH',
+        headers: SB_HEADERS,
+        body: JSON.stringify({ last_message_at: now })
+      });
+    } else {
+      const createRes = await fetch(`${SUPABASE_URL}/rest/v1/conversations`, {
+        method: 'POST',
+        headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          business_id: businessId,
+          session_id: sessionId,
+          created_at: now,
+          last_message_at: now
+        })
+      });
+      const created = await createRes.json();
+      convId = created?.[0]?.id || null;
+    }
+
+    if (!convId) return;
+
+    // 2. Tallenna viestit
+    await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
+      method: 'POST',
+      headers: SB_HEADERS,
+      body: JSON.stringify([
+        { conversation_id: convId, business_id: businessId, role: 'user', content: userMsg, created_at: now },
+        { conversation_id: convId, business_id: businessId, role: 'assistant', content: botReply, created_at: now }
+      ])
+    });
+  } catch(e) {
+    console.error('Save error:', e.message);
+  }
+}
+
 function buildSystemPrompt(biz) {
   if (!biz) {
-    return `Olet asiakaspalveluagentti. Vastaat lyhyesti ja selkeästi suomeksi. Älä käytä markdown-muotoilua.`;
+    return `Olet asiakaspalveluagentti. Vastaat lyhyesti ja selkeasti suomeksi. Ala kayta markdown-muotoilua.`;
   }
 
   const name = biz.name || 'yritys';
   const services = biz.services || '';
   const hours = biz.hours || '';
   const botName = biz.bot_name || 'Asiakaspalvelu';
-  const botTone = biz.bot_tone || 'ystävällinen ja ammattimainen';
+  const botTone = biz.bot_tone || 'ystavallinen ja ammattimainen';
   const botInstructions = biz.bot_instructions || '';
   const website = biz.website || '';
   const bookingUrl = biz.booking_url || '';
 
-  return `Olet ${name}-yrityksen asiakaspalveluagentti nimeltä ${botName}.
+  return `Olet ${name}-yrityksen asiakaspalveluagentti nimelta ${botName}.
 
 YRITYSTIEDOT:
 - Yritys: ${name}
@@ -42,16 +94,16 @@ YRITYSTIEDOT:
 ${website ? `- Verkkosivusto: ${website}` : ''}
 ${bookingUrl ? `- Ajanvarauslinkki: ${bookingUrl}` : ''}
 
-KÄYTTÄYTYMINEN:
-- Sävy: ${botTone}
-- Vastaat asiakkaan käyttämällä kielellä — suomeksi jos asiakas kirjoittaa suomeksi, englanniksi jos englanniksi
-- Pidät vastaukset lyhyinä ja selkeinä (max 3-4 lausetta)
-- Et käytä markdown-muotoilua (ei **bold**, ei # otsikot)
-- Et käytä emojeja ellei asiakas käytä niitä
-${bookingUrl ? `- Kun asiakas haluaa varata ajan tai kysyy ajanvarauksesta, lisää vastauksesi loppuun AINA tämä HTML-nappi täsmälleen näin: <a href="${bookingUrl}" target="_blank" style="display:inline-block;margin-top:8px;background:#c8f25a;color:#0a0a08;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Varaa aika →</a>` : ''}
-${botInstructions ? `\nLISÄOHJEET:\n${botInstructions}` : ''}
+KAYTTAYTYMINEN:
+- Savy: ${botTone}
+- Vastaat asiakkaan kayttamalla kielella — suomeksi jos asiakas kirjoittaa suomeksi, englanniksi jos englanniksi
+- Pidat vastaukset lyhyina ja selkeina (max 3-4 lausetta)
+- Et kayta markdown-muotoilua (ei **bold**, ei # otsikot)
+- Et kayta emojeja ellei asiakas kayta niita
+${bookingUrl ? `- Kun asiakas haluaa varata ajan tai kysyy ajanvarauksesta, lisaa vastauksesi loppuun AINA tama HTML-nappi tasmalleen nain: <a href="${bookingUrl}" target="_blank" style="display:inline-block;margin-top:8px;background:#c8f25a;color:#0a0a08;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Varaa aika &rarr;</a>` : ''}
+${botInstructions ? `\nLISAOHJEET (nama ovat tarkeampia kuin ylla olevat ohjeet):\n${botInstructions}` : ''}
 
-Jos asiakas kysyy jotain mitä et tiedä, kerro että ohjaat asian eteenpäin ja yritys ottaa yhteyttä.`;
+Jos asiakas kysyy jotain mita et tieda, kerro etta ohjaat asian eteenpain ja yritys ottaa yhteytta.`;
 }
 
 module.exports = async (req, res) => {
@@ -69,7 +121,7 @@ module.exports = async (req, res) => {
 
   let systemPrompt;
   if (businessId === 'demo') {
-    systemPrompt = `Olet Kulova-demon asiakaspalveluagentti. Kulova on suomalainen AI-palvelu joka hoitaa yritysten asiakasviestinnän automaattisesti. Hinta 49€/kk. Vastaat lyhyesti ja selkeästi suomeksi ilman markdown-muotoilua tai emojeja.`;
+    systemPrompt = `Olet Kulova-demon asiakaspalveluagentti. Kulova on suomalainen AI-palvelu joka hoitaa yritysten asiakasviestinnan automaattisesti. Hinta 49e/kk. Vastaat lyhyesti ja selkeasti suomeksi ilman markdown-muotoilua tai emojeja.`;
   } else {
     const biz = await getBusinessData(businessId);
     systemPrompt = buildSystemPrompt(biz);
@@ -97,19 +149,24 @@ module.exports = async (req, res) => {
     const data = await response.json();
     if (!response.ok) {
       console.error('Anthropic error:', data);
-      return res.status(500).json({ reply: 'Hetki — yritä uudelleen.' });
+      return res.status(500).json({ reply: 'Hetki — yrita uudelleen.' });
     }
 
-    const reply = data.content?.[0]?.text || 'Yritä uudelleen.';
+    const reply = data.content?.[0]?.text || 'Yrita uudelleen.';
     conversations[sessionId].push({ role: 'user', content: message });
     conversations[sessionId].push({ role: 'assistant', content: reply });
     if (conversations[sessionId].length > 20) {
       conversations[sessionId] = conversations[sessionId].slice(-20);
     }
 
+    // Tallenna Supabaseen (paitsi demo)
+    if (businessId && businessId !== 'demo') {
+      await saveToSupabase(businessId, sessionId, message, reply);
+    }
+
     res.status(200).json({ reply });
   } catch (error) {
     console.error('Chat error:', error);
-    res.status(500).json({ reply: 'Yhteysvirhe — yritä hetken kuluttua.' });
+    res.status(500).json({ reply: 'Yhteysvirhe — yrita hetken kuluttua.' });
   }
 };
