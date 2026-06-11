@@ -6,7 +6,14 @@ module.exports = async (req, res) => {
   const code = `(function() {
   const KULOVA_API = 'https://kulova-backend.vercel.app';
   const businessId = document.currentScript ? document.currentScript.getAttribute('data-business') : 'demo';
-  const sessionId = Math.random().toString(36).substring(2, 15);
+  let sessionId = null;
+  try {
+    sessionId = localStorage.getItem('kulova-session');
+    if (!sessionId) {
+      sessionId = 'ks_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem('kulova-session', sessionId);
+    }
+  } catch(e) { sessionId = 'ks_' + Math.random().toString(36).substring(2, 15); }
 
   const style = document.createElement('style');
   style.textContent = [
@@ -31,7 +38,7 @@ module.exports = async (req, res) => {
 
   const widget = document.createElement('div');
   widget.id = 'kulova-widget';
-  widget.innerHTML = '<div id="kulova-box"><div id="kulova-header"><span>Asiakaspalvelu</span><button onclick="document.getElementById(\\'kulova-box\\').classList.remove(\\'open\\')" style="background:none;border:none;color:#6b6b63;cursor:pointer;font-size:18px;">x</button></div><div id="kulova-messages"><div class="kulova-msg bot">Hei! Miten voin auttaa?</div></div><div id="kulova-input-area"><input id="kulova-input" type="text" placeholder="Kirjoita viesti..." /><button id="kulova-send">Lähetä</button></div><div id="kulova-footer">Powered by <a href="https://kulova.com" target="_blank" style="color:#c0c0c0;">Kulova</a></div></div><button id="kulova-btn" onclick="document.getElementById(\\'kulova-box\\').classList.toggle(\\'open\\')"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0a08" stroke-width="2" width="24" height="24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></button>';
+  widget.innerHTML = '<div id="kulova-box"><div id="kulova-header"><span id="kulova-title">Asiakaspalvelu</span><button onclick="document.getElementById(\\'kulova-box\\').classList.remove(\\'open\\')" style="background:none;border:none;color:#6b6b63;cursor:pointer;font-size:18px;">x</button></div><div id="kulova-messages"><div class="kulova-msg bot">Hei! Miten voin auttaa?</div></div><div id="kulova-input-area"><input id="kulova-input" type="text" placeholder="Kirjoita viesti..." /><button id="kulova-send">Lähetä</button></div><div id="kulova-footer">Powered by <a href="https://kulova.com" target="_blank" style="color:#c0c0c0;">Kulova</a></div></div><button id="kulova-btn" onclick="document.getElementById(\\'kulova-box\\').classList.toggle(\\'open\\')"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0a08" stroke-width="2" width="24" height="24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></button>';
   document.body.appendChild(widget);
 
   const messagesEl = document.getElementById('kulova-messages');
@@ -41,7 +48,7 @@ module.exports = async (req, res) => {
   function addMessage(text, type) {
     const msg = document.createElement('div');
     msg.className = 'kulova-msg ' + type;
-    msg.innerHTML = text;
+    if (type === 'user') { msg.textContent = text; } else { msg.innerHTML = text; }
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return msg;
@@ -70,6 +77,18 @@ module.exports = async (req, res) => {
 
   sendBtn.addEventListener('click', sendMessage);
   inputEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') sendMessage(); });
+
+  // Hae botin nimi
+  if (businessId && businessId !== 'demo') {
+    fetch(KULOVA_API + '/api/botinfo?businessId=' + encodeURIComponent(businessId))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d && d.botName) {
+          document.getElementById('kulova-title').textContent = d.botName;
+        }
+      })
+      .catch(function() {});
+  }
 })();`;
 
   res.status(200).send(code);
