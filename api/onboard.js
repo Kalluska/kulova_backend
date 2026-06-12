@@ -15,7 +15,9 @@ async function supabaseInsert(table, data) {
     },
     body: JSON.stringify(data)
   });
-  return res.json();
+  const out = await res.json().catch(() => null);
+  if (!res.ok) { const e = new Error((out && out.message) || ('HTTP ' + res.status)); e.status = res.status; throw e; }
+  return out;
 }
 
 module.exports = async (req, res) => {
@@ -49,12 +51,14 @@ module.exports = async (req, res) => {
       type: businessType || 'palveluyritys',
       services,
       hours: hours || 'Ma-Pe 9-17',
-      owner_email: ownerEmail,
+      owner_email: ownerEmail.toLowerCase(),
       is_admin: isAdmin,
       is_active: true
     });
   } catch(e) {
     console.log('DB insert error:', e.message);
+    if (e.status === 409) return res.status(409).json({ error: 'Sähköposti on jo käytössä. Kirjaudu sisään osoitteessa kulova.com/dashboard' });
+    return res.status(500).json({ error: 'Tilin luonti epäonnistui, yritä uudelleen' });
   }
 
   const widgetCode = `<script src="https://kulova-backend.vercel.app/api/widget.js" data-business="${businessId}"><\/script>`;
