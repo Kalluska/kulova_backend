@@ -45,6 +45,6 @@ module.exports = async (req, res) => {
     });
   }
   const created = await createRes.json();
-  if (!createRes.ok) return res.status(500).json({ error: 'create failed' });
+  if (!createRes.ok) return res.status(500).json({ error: 'create failed', detail: created });
   return res.status(200).json({ business: created?.[0], created: true });
 };
