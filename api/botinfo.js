@@ -8,10 +8,11 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const businessId = req.query.businessId;
-  if (!businessId) return res.status(400).json({ error: 'businessId required' });
+  const shopDomain = req.query.shopDomain;
+  if (!businessId && !shopDomain) return res.status(400).json({ error: 'businessId or shopDomain required' });
 
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/businesses?id=eq.${businessId}&select=bot_name,is_active`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/businesses?${shopDomain ? `shopify_domain=eq.${encodeURIComponent(shopDomain)}` : `id=eq.${businessId}`}&select=bot_name,is_active`, {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
     });
     const rows = await r.json();

@@ -22,6 +22,18 @@ async function getBusinessData(businessId) {
   }
 }
 
+async function getBusinessByShopDomain(shopDomain) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/businesses?shopify_domain=eq.${encodeURIComponent(shopDomain)}&select=*`, {
+      headers: SB_HEADERS
+    });
+    const rows = await res.json();
+    return rows?.[0] || null;
+  } catch(e) {
+    return null;
+  }
+}
+
 async function saveToSupabase(businessId, sessionId, userMsg, botReply) {
   try {
     const now = new Date().toISOString();
@@ -114,15 +126,20 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { message, sessionId, businessId } = req.body;
+  const { message, sessionId, businessId, shopDomain } = req.body;
   if (!message || !sessionId) return res.status(400).json({ error: 'Missing fields' });
 
   if (!conversations[sessionId]) conversations[sessionId] = [];
   const history = conversations[sessionId];
 
   let systemPrompt;
+  let resolvedBusinessId = businessId || null;
   if (businessId === 'demo') {
     systemPrompt = `Olet Kulova-demon asiakaspalveluagentti. Kulova on suomalainen AI-palvelu joka hoitaa yritysten asiakasviestinnan automaattisesti. Hinta 49e/kk. Vastaat lyhyesti ja selkeasti suomeksi ilman markdown-muotoilua tai emojeja.`;
+  } else if (shopDomain) {
+    const biz = await getBusinessByShopDomain(shopDomain);
+    if (biz) resolvedBusinessId = biz.id;
+    systemPrompt = buildSystemPrompt(biz);
   } else {
     const biz = await getBusinessData(businessId);
     systemPrompt = buildSystemPrompt(biz);
@@ -161,8 +178,8 @@ module.exports = async (req, res) => {
     }
 
     // Tallenna Supabaseen (paitsi demo)
-    if (businessId && businessId !== 'demo') {
-      await saveToSupabase(businessId, sessionId, message, reply);
+    if (resolvedBusinessId && resolvedBusinessId !== 'demo') {
+      await saveToSupabase(resolvedBusinessId, sessionId, message, reply);
     }
 
     res.status(200).json({ reply });
