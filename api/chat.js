@@ -96,6 +96,18 @@ function buildSystemPrompt(biz) {
   const botInstructions = biz.bot_instructions || '';
   const website = biz.website || '';
   const bookingUrl = biz.booking_url || '';
+  // support_email is the Shopify-settings field; owner_email keeps this working
+  // for pre-Shopify kulova.com customers who never set support_email.
+  const contactEmail = biz.support_email || biz.owner_email || '';
+
+  // Kulova has no mechanism to actually forward a question to the merchant —
+  // telling the customer "we'll pass this along" would be a lie nobody acts on.
+  // Point them at a real contact channel instead, or be upfront that there isn't one.
+  const unknownAnswerInstruction = contactEmail
+    ? `Jos asiakas kysyy jotain mita et tieda, kerro rehellisesti ettet tieda vastausta ja ohjaa hanet ottamaan yhteytta osoitteeseen ${contactEmail}.`
+    : website
+      ? `Jos asiakas kysyy jotain mita et tieda, kerro rehellisesti ettet tieda vastausta ja ohjaa hanet yrityksen verkkosivuille (${website}) ottamaan yhteytta.`
+      : `Jos asiakas kysyy jotain mita et tieda, kerro rehellisesti ettet tieda vastausta ja pyyda hanta ottamaan suoraan yhteytta yritykseen. ALA VAITA etta valitat asian eteenpain tai etta joku ottaa haneen yhteytta, koska sinulla ei ole tallaista mekanismia.`;
 
   return `Olet ${name}-yrityksen asiakaspalveluagentti nimelta ${botName}.
 
@@ -109,14 +121,14 @@ ${bookingUrl ? `- Ajanvarauslinkki: ${bookingUrl}` : ''}
 KAYTTAYTYMINEN:
 - Savy: ${botTone}
 - Vastaat asiakkaan kayttamalla kielella — suomeksi jos asiakas kirjoittaa suomeksi, englanniksi jos englanniksi
-- Pidat vastaukset lyhyina ja selkeina (max 3-4 lausetta)
+- Pidat vastaukset lyhyina: 2-3 lausetta, ellei kysymys aidosti vaadi enempaa
 - Et kayta markdown-muotoilua (ei **bold**, ei # otsikot)
 - Et kayta emojeja ellei asiakas kayta niita
 ${bookingUrl ? `- Kun asiakas haluaa varata ajan tai kysyy ajanvarauksesta, lisaa vastauksesi loppuun AINA tama HTML-nappi tasmalleen nain: <a href="${bookingUrl}" target="_blank" style="display:inline-block;margin-top:8px;background:#c8f25a;color:#0a0a08;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Varaa aika &rarr;</a>` : ''}
 ${!bookingUrl ? `- Et voi tehda ajanvarauksia etka kirjata aikoja jarjestelmaan. Jos asiakas haluaa varata ajan, pyyda hanta soittamaan tai kayttamaan yrityksen tavallista varaustapaa. ALA KOSKAAN vaita etta olet tehnyt varauksen tai etta varaus on hoidettu.` : ''}
 ${botInstructions ? `\nLISAOHJEET (nama ovat tarkeampia kuin ylla olevat ohjeet):\n${botInstructions}` : ''}
 
-Jos asiakas kysyy jotain mita et tieda, kerro etta ohjaat asian eteenpain ja yritys ottaa yhteytta.`;
+${unknownAnswerInstruction}`;
 }
 
 module.exports = async (req, res) => {
