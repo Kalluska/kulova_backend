@@ -1,4 +1,4 @@
-// api/shopify-sync.js — Shopify-appin sisainen synkronointi
+// api/shopify-sync.js — Shopify-appin sisainen synkronointi + asetusten luku/kirjoitus
 const SUPABASE_URL = 'https://eacfiiscsdqdcoduyzkk.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
 const SB_HEADERS = {
@@ -7,11 +7,46 @@ const SB_HEADERS = {
   'Content-Type': 'application/json'
 };
 
-module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!process.env.KULOVA_INTERNAL_KEY || req.headers['x-kulova-key'] !== process.env.KULOVA_INTERNAL_KEY) {
-    return res.status(401).json({ error: 'unauthorized' });
+const EDITABLE_SETTINGS_FIELDS = ['services', 'hours', 'bot_instructions', 'support_email'];
+
+async function handleGetSettings(req, res) {
+  const shopDomain = req.query.shopDomain;
+  if (!shopDomain) return res.status(400).json({ error: 'shopDomain required' });
+
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/businesses?shopify_domain=eq.${encodeURIComponent(shopDomain)}&select=services,hours,bot_instructions,support_email`,
+    { headers: SB_HEADERS }
+  );
+  const rows = await r.json();
+  if (!rows?.[0]) return res.status(404).json({ error: 'not found' });
+  return res.status(200).json({ settings: rows[0] });
+}
+
+async function handleUpdateSettings(req, res) {
+  const { shopDomain, ...body } = req.body || {};
+  if (!shopDomain) return res.status(400).json({ error: 'shopDomain required' });
+
+  const update = {};
+  for (const field of EDITABLE_SETTINGS_FIELDS) {
+    if (typeof body[field] === 'string') update[field] = body[field];
   }
+  if (Object.keys(update).length === 0) return res.status(400).json({ error: 'no editable fields provided' });
+
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/businesses?shopify_domain=eq.${encodeURIComponent(shopDomain)}`,
+    {
+      method: 'PATCH',
+      headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify(update)
+    }
+  );
+  const updated = await r.json();
+  if (!r.ok) return res.status(500).json({ error: 'update failed', detail: updated });
+  if (!updated?.[0]) return res.status(404).json({ error: 'not found' });
+  return res.status(200).json({ settings: updated[0] });
+}
+
+async function handleSync(req, res) {
   const { shopDomain, shopName, email } = req.body || {};
   if (!shopDomain) return res.status(400).json({ error: 'shopDomain required' });
 
@@ -47,4 +82,15 @@ module.exports = async (req, res) => {
   const created = await createRes.json();
   if (!createRes.ok) return res.status(500).json({ error: 'create failed', detail: created });
   return res.status(200).json({ business: created?.[0], created: true });
+}
+
+module.exports = async (req, res) => {
+  if (!process.env.KULOVA_INTERNAL_KEY || req.headers['x-kulova-key'] !== process.env.KULOVA_INTERNAL_KEY) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  if (req.method === 'GET') return handleGetSettings(req, res);
+  if (req.method === 'PATCH') return handleUpdateSettings(req, res);
+  if (req.method === 'POST') return handleSync(req, res);
+  return res.status(405).json({ error: 'Method not allowed' });
 };
