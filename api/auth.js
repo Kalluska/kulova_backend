@@ -1,7 +1,13 @@
-// api/auth.js — PIN-koodi kirjautuminen
+// api/auth.js — PIN-koodi kirjautuminen + istuntotokenin luonti
+const crypto = require('crypto');
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
+
+const MAX_ATTEMPTS = 5;
+const SEND_THROTTLE_MS = 60 * 1000;
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 vrk
 
 async function sb(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -17,6 +23,10 @@ async function sb(path, options = {}) {
   return res.json();
 }
 
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -29,12 +39,26 @@ module.exports = async (req, res) => {
   // Lähetä PIN-koodi
   if (action === 'send') {
     if (!email) return res.status(400).json({ error: 'Missing email' });
+    const normalizedEmail = email.toLowerCase();
 
     // Tarkista onko sähköposti olemassa
-    const businesses = await sb(`businesses?owner_email=eq.${encodeURIComponent(email.toLowerCase())}&select=id,name`);
+    const businesses = await sb(`businesses?owner_email=eq.${encodeURIComponent(normalizedEmail)}&select=id,name`);
     if (!businesses?.length) {
       return res.status(404).json({ error: 'Email not found' });
     }
+
+    // Rate limit: max 1 lähetys / 60s per sähköposti (estää spämmäyksen)
+    const recent = await sb(`login_codes?email=eq.${encodeURIComponent(normalizedEmail)}&select=created_at&order=created_at.desc&limit=1`);
+    if (recent?.[0] && Date.now() - new Date(recent[0].created_at).getTime() < SEND_THROTTLE_MS) {
+      return res.status(429).json({ error: 'Koodi on jo lähetetty. Odota hetki ennen uutta yritystä.' });
+    }
+
+    // Mitätöi aiemmat käyttämättömät koodit — muuten hyökkääjä voisi kerätä
+    // useita rinnakkaisia arvausbudjetteja spämmäämällä lähetystä.
+    await sb(`login_codes?email=eq.${encodeURIComponent(normalizedEmail)}&used=eq.false`, {
+      method: 'PATCH',
+      body: JSON.stringify({ used: true })
+    });
 
     // Luo 6-numeroinen koodi
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
@@ -43,7 +67,7 @@ module.exports = async (req, res) => {
     // Tallenna koodi
     await sb('login_codes', {
       method: 'POST',
-      body: JSON.stringify({ email: email.toLowerCase(), code: pin, expires_at: expires })
+      body: JSON.stringify({ email: normalizedEmail, code: pin, expires_at: expires })
     });
 
     // Lähetä sähköposti
@@ -53,7 +77,7 @@ module.exports = async (req, res) => {
         headers: { 'Content-Type': 'application/json', 'api-key': BREVO_API_KEY },
         body: JSON.stringify({
           sender: { name: 'Kulova', email: 'hello@kulova.com' },
-          to: [{ email: email.toLowerCase(), name: businesses[0].name }],
+          to: [{ email: normalizedEmail, name: businesses[0].name }],
           subject: 'Kulova — kirjautumiskoodi',
           htmlContent: `
             <div style="font-family:sans-serif;max-width:400px;margin:0 auto;">
@@ -74,19 +98,27 @@ module.exports = async (req, res) => {
     return res.status(200).json({ success: true });
   }
 
-  // Tarkista PIN-koodi
+  // Tarkista PIN-koodi + luo istuntotoken
   if (action === 'verify') {
     if (!email || !code) return res.status(400).json({ error: 'Missing email or code' });
+    const normalizedEmail = email.toLowerCase();
+    // Sama virhe riippumatta syystä (ei koodia, väärä koodi, vanhentunut, liikaa
+    // yrityksiä) — muuten vastauksesta voisi päätellä mitä osaa arvata seuraavaksi.
+    const GENERIC_ERROR = { error: 'Virheellinen tai vanhentunut koodi.' };
 
-    const codes = await sb(`login_codes?email=eq.${encodeURIComponent(email.toLowerCase())}&code=eq.${code}&used=eq.false&select=*`);
-    
-    if (!codes?.length) {
-      return res.status(401).json({ error: 'Invalid code' });
+    const codes = await sb(`login_codes?email=eq.${encodeURIComponent(normalizedEmail)}&used=eq.false&select=*&order=created_at.desc&limit=1`);
+    const loginCode = codes?.[0];
+
+    if (!loginCode || loginCode.attempts >= MAX_ATTEMPTS || new Date(loginCode.expires_at) < new Date()) {
+      return res.status(401).json(GENERIC_ERROR);
     }
 
-    const loginCode = codes[0];
-    if (new Date(loginCode.expires_at) < new Date()) {
-      return res.status(401).json({ error: 'Code expired' });
+    if (loginCode.code !== code) {
+      await sb(`login_codes?id=eq.${loginCode.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ attempts: loginCode.attempts + 1 })
+      });
+      return res.status(401).json(GENERIC_ERROR);
     }
 
     // Merkitse käytetyksi
@@ -96,15 +128,26 @@ module.exports = async (req, res) => {
     });
 
     // Hae yritystiedot
-    const businesses = await sb(`businesses?owner_email=eq.${encodeURIComponent(email.toLowerCase())}&select=id,name`);
+    const businesses = await sb(`businesses?owner_email=eq.${encodeURIComponent(normalizedEmail)}&select=id,name`);
     if (!businesses?.length) {
       return res.status(404).json({ error: 'Business not found' });
     }
+    const biz = businesses[0];
 
-    return res.status(200).json({ 
-      success: true, 
-      businessId: businesses[0].id,
-      businessName: businesses[0].name
+    // Luo istuntotoken — raakaa tokenia ei koskaan tallenneta, vain sen tiiviste
+    const rawToken = crypto.randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    await sb('sessions', {
+      method: 'POST',
+      body: JSON.stringify({ business_id: biz.id, token_hash: hashToken(rawToken), expires_at: expiresAt })
+    });
+
+    return res.status(200).json({
+      success: true,
+      businessId: biz.id,
+      businessName: biz.name,
+      token: rawToken,
+      expiresAt
     });
   }
 
