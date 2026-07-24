@@ -1,7 +1,7 @@
 // api/onboard.js — with Supabase
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
 const ADMIN_EMAIL = 'kalle.etelaaho15@gmail.com';
 
 async function supabaseInsert(table, data) {
