@@ -293,6 +293,7 @@ module.exports = async (req, res) => {
       console.error('Anthropic error:', data);
       return res.status(500).json({ reply: 'Hetki — yrita uudelleen.' });
     }
+    console.log('Anthropic usage:', JSON.stringify(data.usage));
 
     if (data.stop_reason === 'tool_use') {
       const toolUse = data.content.find(b => b.type === 'tool_use');
