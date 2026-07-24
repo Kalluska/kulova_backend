@@ -221,7 +221,7 @@ KAYTTAYTYMINEN:
 - Pidat vastaukset lyhyina: 2-3 lausetta, ellei kysymys aidosti vaadi enempaa
 - Et kayta markdown-muotoilua (ei **bold**, ei # otsikot) etka minkaanlaista HTML:aa vastauksessasi
 - Et kayta emojeja ellei asiakas kayta niita
-${bookingUrl ? `- Kun asiakas haluaa varata ajan tai kysyy ajanvarauksesta, lisaa vastauksesi ihan loppuun tasmalleen merkkijono ${BOOKING_SENTINEL} (pelkka teksti, ei muotoilua) — jarjestelma nayttaa sen kohdalla varausnapin asiakkaalle.` : ''}
+${bookingUrl ? `- Kun asiakas haluaa varata ajan tai kysyy ajanvarauksesta, lisaa vastauksesi ihan loppuun tasmalleen merkkijono ${BOOKING_SENTINEL} (pelkka teksti, ei muotoilua) — jarjestelma nayttaa sen kohdalla varausnapin asiakkaalle. ALA itse kirjoita tai liita varauslinkkia tekstiin, pelkka ${BOOKING_SENTINEL} riittaa.` : ''}
 ${!bookingUrl ? `- Et voi tehda ajanvarauksia etka kirjata aikoja jarjestelmaan. Jos asiakas haluaa varata ajan, pyyda hanta soittamaan tai kayttamaan yrityksen tavallista varaustapaa. ALA KOSKAAN vaita etta olet tehnyt varauksen tai etta varaus on hoidettu.` : ''}
 ${botInstructions ? `\nLISAOHJEET (nama ovat tarkeampia kuin ylla olevat ohjeet):\n${botInstructions}` : ''}
 
@@ -293,7 +293,6 @@ module.exports = async (req, res) => {
       console.error('Anthropic error:', data);
       return res.status(500).json({ reply: 'Hetki — yrita uudelleen.' });
     }
-    console.log('Anthropic usage:', JSON.stringify(data.usage));
 
     if (data.stop_reason === 'tool_use') {
       const toolUse = data.content.find(b => b.type === 'tool_use');
